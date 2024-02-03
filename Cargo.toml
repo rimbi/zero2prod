@@ -15,6 +15,7 @@ tracing-actix-web = "0.6.0"
 tracing-log = "0.1.0"
 tracing-subscriber = "0.2.16"
 serde = { version = "1.0.196", features = ["derive"] }
+serde-aux = "3"
 tokio = { version = "1.35.1", features = ["full"] }
 uuid = { version = "0.8.2", features = ["v4"] }
 

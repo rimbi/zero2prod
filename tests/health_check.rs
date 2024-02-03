@@ -1,5 +1,5 @@
 use secrecy::ExposeSecret;
-use sqlx::{Connection, Executor, PgConnection, PgPool};
+use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
@@ -45,16 +45,15 @@ async fn spawn_app() -> TestApp {
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
     // Create database
-    let mut connection =
-        PgConnection::connect(&config.connection_string_without_db().expose_secret())
-            .await
-            .expect("Failed to connect to Postgres");
+    let mut connection = PgConnection::connect_with(&config.without_db())
+        .await
+        .expect("Failed to connect to Postgres");
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database.");
     // Migrate database
-    let connection_pool = PgPool::connect(&config.connection_string().expose_secret())
+    let connection_pool = PgPool::connect_with(config.with_db())
         .await
         .expect("Failed to connect to Postgres.");
     sqlx::migrate!("./migrations")
@@ -70,10 +69,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     let client = reqwest::Client::new();
 
     let configuration = get_configuration().expect("Failed to read configuration");
-    let connection_string = configuration.database.connection_string();
-    let mut connection = PgConnection::connect(&connection_string.expose_secret())
-        .await
-        .expect("Failed to connect to Postgres.");
+    let connection = PgPoolOptions::new().connect_lazy_with(configuration.database.with_db());
 
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
     let response = client
@@ -87,7 +83,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
     assert_eq!(200, response.status().as_u16());
 
     let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
-        .fetch_one(&mut connection)
+        .fetch_one(&connection)
         .await
         .expect("Failed to fetch saved subscription.");
     assert_eq!(saved.email, "ursula_le_guin@gmail.com");
